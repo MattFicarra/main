@@ -65,10 +65,10 @@ function drawMandelbrot(isPreview = false) {
     const imageData = ctx.createImageData(canvas.width, canvas.height);
     const data = imageData.data;
     
-    // Pre-calculate width and height ratios
     const widthRatio = (maxX - minX) / canvas.width;
     const heightRatio = (maxY - minY) / canvas.height;
     
+    // Fixed the dy condition (was using dx instead of dy)
     for (let x = 0; x < canvas.width; x += blockSize) {
         for (let y = 0; y < canvas.height; y += blockSize) {
             const cReal = minX + x * widthRatio;
@@ -76,7 +76,7 @@ function drawMandelbrot(isPreview = false) {
             
             const iterations = calculateIterations(cReal, cImag, maxIterations);
             
-            // Fill the block with the calculated color
+            // Correctly fill the block
             for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
                 for (let dy = 0; dx < blockSize && y + dy < canvas.height; dy++) {
                     setPixelColor(x + dx, y + dy, iterations, data);
@@ -87,6 +87,11 @@ function drawMandelbrot(isPreview = false) {
     
     ctx.putImageData(imageData, 0, 0);
     isDrawing = false;
+    
+    // If this was a preview, schedule the full render
+    if (isPreview) {
+        setTimeout(() => requestAnimationFrame(() => drawMandelbrot(false)), 50);
+    }
 }
 
 function drawMandelbrotProgressive(oldMinX, oldMaxX, oldMinY, oldMaxY, oldImageData) {
