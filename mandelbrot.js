@@ -5,50 +5,71 @@ let minX = -2;
 let maxX = 1;
 let minY = -1.5;
 let maxY = 1.5;
+let isDrawing = false;
+let resizeTimeout;
 
 function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    drawMandelbrot();
+    // Clear existing timeout
+    clearTimeout(resizeTimeout);
+    
+    // Debounce resize
+    resizeTimeout = setTimeout(() => {
+        const size = Math.min(window.innerWidth, window.innerHeight);
+        canvas.width = size;
+        canvas.height = size;
+        
+        // Center canvas
+        canvas.style.position = 'absolute';
+        canvas.style.left = `${(window.innerWidth - size) / 2}px`;
+        canvas.style.top = `${(window.innerHeight - size) / 2}px`;
+        
+        requestAnimationFrame(drawMandelbrot);
+    }, 100);
 }
 
 function handleZoom(e, zoomIn) {
     e.preventDefault();
+    if (isDrawing) return; // Prevent multiple zooms while drawing
+    
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
     const zoomFactor = zoomIn ? 0.5 : 2;
     
-    // Convert click coordinates to complex plane
     const clickX = minX + (maxX - minX) * (x / canvas.width);
     const clickY = minY + (maxY - minY) * (y / canvas.height);
     
-    // Calculate new bounds
     const newWidth = (maxX - minX) * zoomFactor;
-    const newHeight = (maxY - minY) * zoomFactor;
+    // Keep aspect ratio 1:1
+    const newHeight = newWidth;
     
     minX = clickX - newWidth / 2;
     maxX = clickX + newWidth / 2;
     minY = clickY - newHeight / 2;
     maxY = clickY + newHeight / 2;
     
-    drawMandelbrot();
+    requestAnimationFrame(drawMandelbrot);
 }
 
 function drawMandelbrot() {
+    isDrawing = true;
     const imageData = ctx.createImageData(canvas.width, canvas.height);
     const data = imageData.data;
+    const maxIterations = 1000;
+    
+    // Pre-calculate width and height ratios
+    const widthRatio = (maxX - minX) / canvas.width;
+    const heightRatio = (maxY - minY) / canvas.height;
     
     for (let x = 0; x < canvas.width; x++) {
         for (let y = 0; y < canvas.height; y++) {
-            const cReal = minX + (maxX - minX) * (x / canvas.width);
-            const cImag = minY + (maxY - minY) * (y / canvas.height);
+            const cReal = minX + x * widthRatio;
+            const cImag = minY + y * heightRatio;
             
             let zReal = 0;
             let zImag = 0;
             let iteration = 0;
-            const maxIterations = 1000;
             
             while (zReal * zReal + zImag * zImag < 4 && iteration < maxIterations) {
                 const nextZReal = zReal * zReal - zImag * zImag + cReal;
@@ -71,7 +92,9 @@ function drawMandelbrot() {
             data[i + 3] = 255;
         }
     }
+    
     ctx.putImageData(imageData, 0, 0);
+    isDrawing = false;
 }
 
 function hslToRgb(h, s, l) {
