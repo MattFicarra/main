@@ -58,6 +58,7 @@ function handleZoom(e, zoomIn) {
 }
 
 function drawMandelbrot(isPreview = false) {
+    console.log('Starting render:', isPreview ? 'preview' : 'full');
     isDrawing = true;
     const blockSize = isPreview ? 4 : 1;
     const maxIterations = isPreview ? 100 : 1000;
@@ -68,82 +69,49 @@ function drawMandelbrot(isPreview = false) {
     const widthRatio = (maxX - minX) / canvas.width;
     const heightRatio = (maxY - minY) / canvas.height;
     
-    // Fixed the dy condition (was using dx instead of dy)
+    console.log('Canvas size:', canvas.width, 'x', canvas.height);
+    console.log('Coordinate range:', minX, maxX, minY, maxY);
+    
     for (let x = 0; x < canvas.width; x += blockSize) {
-        for (let y = 0; y < canvas.height; y += blockSize) {
+        for (let y = 0; x < canvas.height; y += blockSize) {
             const cReal = minX + x * widthRatio;
             const cImag = minY + y * heightRatio;
             
             const iterations = calculateIterations(cReal, cImag, maxIterations);
             
-            // Correctly fill the block
-            for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
-                for (let dy = 0; dx < blockSize && y + dy < canvas.height; dy++) {
-                    setPixelColor(x + dx, y + dy, iterations, data);
+            // Fixed nested loop conditions and simplified block filling
+            for (let dx = 0; dx < blockSize && (x + dx) < canvas.width; dx++) {
+                for (let dy = 0; dy < blockSize && (y + dy) < canvas.height; dy++) {
+                    const pixelX = x + dx;
+                    const pixelY = y + dy;
+                    const index = (pixelY * canvas.width + pixelX) * 4;
+                    
+                    if (iterations === maxIterations) {
+                        data[index] = data[index + 1] = data[index + 2] = 0;
+                    } else {
+                        const hue = (iterations % 360) / 360;
+                        const [r, g, b] = hslToRgb(hue, 1, 0.5);
+                        data[index] = r;
+                        data[index + 1] = g;
+                        data[index + 2] = b;
+                    }
+                    data[index + 3] = 255;
                 }
             }
         }
     }
     
     ctx.putImageData(imageData, 0, 0);
+    console.log('Render complete');
     isDrawing = false;
     
-    // If this was a preview, schedule the full render
     if (isPreview) {
         setTimeout(() => requestAnimationFrame(() => drawMandelbrot(false)), 50);
     }
 }
 
-function drawMandelbrotProgressive(oldMinX, oldMaxX, oldMinY, oldMaxY, oldImageData) {
-    const imageData = ctx.createImageData(canvas.width, canvas.height);
-    const data = imageData.data;
-    const oldData = oldImageData.data;
-    
-    // Calculate mapping between old and new coordinates
-    const xScale = (oldMaxX - oldMinX) / (maxX - minX);
-    const yScale = (oldMaxY - oldMinY) / (maxY - minY);
-    
-    let y = 0;
-    function processRow() {
-        if (y >= canvas.height) {
-            ctx.putImageData(imageData, 0, 0);
-            isDrawing = false;
-            return;
-        }
-        
-        for (let x = 0; x < canvas.width; x++) {
-            const cReal = minX + (maxX - minX) * (x / canvas.width);
-            const cImag = minY + (maxY - minY) * (y / canvas.height);
-            
-            // Check if point can be interpolated from old image
-            const oldX = ((cReal - oldMinX) / (oldMaxX - oldMinX)) * canvas.width;
-            const oldY = ((cImag - oldMinY) / (oldMaxY - oldMinY)) * canvas.height;
-            
-            if (oldX >= 0 && oldX < canvas.width && oldY >= 0 && oldY < canvas.height) {
-                // Use old pixel if available
-                const oldIndex = (Math.floor(oldY) * canvas.width + Math.floor(oldX)) * 4;
-                const newIndex = (y * canvas.width + x) * 4;
-                data[newIndex] = oldData[oldIndex];
-                data[newIndex + 1] = oldData[oldIndex + 1];
-                data[newIndex + 2] = oldData[oldIndex + 2];
-                data[newIndex + 3] = 255;
-            } else {
-                // Calculate new pixel
-                const iterations = calculateIterations(cReal, cImag, maxIterations);
-                setPixelColor(x, y, iterations, data);
-            }
-        }
-        
-        if (y % 10 === 0) {
-            ctx.putImageData(imageData, 0, 0);
-        }
-        y++;
-        requestAnimationFrame(processRow);
-    }
-    
-    isDrawing = true;
-    processRow();
-}
+// Remove or comment out the drawMandelbrotProgressive function for now
+// ...rest of existing code...
 
 function isInMainCardioidOrBulb(x, y) {
     // Check if point is in main cardioid
