@@ -12,14 +12,19 @@ const BASE_SIZE = 800; // Fixed reference size
 function resizeCanvas() {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-        const size = Math.min(window.innerWidth, window.innerHeight);
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
         canvas.style.position = 'absolute';
-        canvas.style.left = `${(window.innerWidth - size) / 2}px`;
-        canvas.style.top = `${(window.innerHeight - size) / 2}px`;
+        canvas.style.left = '0';
+        canvas.style.top = '0';
         
-        // Draw low res preview first, then full resolution
+        // Maintain aspect ratio in the mathematical space
+        const ratio = window.innerWidth / window.innerHeight;
+        const mathHeight = (maxX - minX) / ratio;
+        const centerY = (maxY + minY) / 2;
+        minY = centerY - mathHeight / 2;
+        maxY = centerY + mathHeight / 2;
+        
         drawMandelbrot(true);
         setTimeout(() => drawMandelbrot(false), 50);
     }, 100);
@@ -27,27 +32,60 @@ function resizeCanvas() {
 
 function handleZoom(e, zoomIn) {
     e.preventDefault();
-    if (isDrawing) return; // Prevent multiple zooms while drawing
+    if (isDrawing) return;
     
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
+    // Save current image for interpolation
+    const oldImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const zoomFactor = zoomIn ? 0.5 : 2;
     
+    // Calculate new boundaries
     const clickX = minX + (maxX - minX) * (x / canvas.width);
     const clickY = minY + (maxY - minY) * (y / canvas.height);
     
     const newWidth = (maxX - minX) * zoomFactor;
-    // Keep aspect ratio 1:1
-    const newHeight = newWidth;
+    const newHeight = (maxY - minY) * zoomFactor;
+    
+    // Store old boundaries for interpolation
+    const oldMinX = minX, oldMaxX = maxX;
+    const oldMinY = minY, oldMaxY = maxY;
     
     minX = clickX - newWidth / 2;
     maxX = clickX + newWidth / 2;
     minY = clickY - newHeight / 2;
     maxY = clickY + newHeight / 2;
     
-    requestAnimationFrame(drawMandelbrot);
+    // Immediate scaled render
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Draw scaled version of old image
+    tempCtx.putImageData(oldImageData, 0, 0);
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Calculate scaling transform
+    const scaleX = canvas.width / (x - (zoomIn ? canvas.width/4 : -canvas.width));
+    const scaleY = canvas.height / (y - (zoomIn ? canvas.height/4 : -canvas.height));
+    
+    ctx.translate(x, y);
+    ctx.scale(zoomIn ? 2 : 0.5, zoomIn ? 2 : 0.5);
+    ctx.translate(-x, -y);
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.restore();
+    
+    // Progressive refinement
+    requestAnimationFrame(() => {
+        drawMandelbrot(true); // Quick preview
+        requestAnimationFrame(() => {
+            drawMandelbrotProgressive(oldMinX, oldMaxX, oldMinY, oldMaxY, oldImageData);
+        });
+    });
 }
 
 function drawMandelbrot(isPreview = false) {
@@ -104,6 +142,57 @@ function drawMandelbrot(isPreview = false) {
     
     ctx.putImageData(imageData, 0, 0);
     isDrawing = false;
+}
+
+function drawMandelbrotProgressive(oldMinX, oldMaxX, oldMinY, oldMaxY, oldImageData) {
+    const imageData = ctx.createImageData(canvas.width, canvas.height);
+    const data = imageData.data;
+    const oldData = oldImageData.data;
+    
+    // Calculate mapping between old and new coordinates
+    const xScale = (oldMaxX - oldMinX) / (maxX - minX);
+    const yScale = (oldMaxY - oldMinY) / (maxY - minY);
+    
+    let y = 0;
+    function processRow() {
+        if (y >= canvas.height) {
+            ctx.putImageData(imageData, 0, 0);
+            isDrawing = false;
+            return;
+        }
+        
+        for (let x = 0; x < canvas.width; x++) {
+            const cReal = minX + (maxX - minX) * (x / canvas.width);
+            const cImag = minY + (maxY - minY) * (y / canvas.height);
+            
+            // Check if point can be interpolated from old image
+            const oldX = ((cReal - oldMinX) / (oldMaxX - oldMinX)) * canvas.width;
+            const oldY = ((cImag - oldMinY) / (oldMaxY - oldMinY)) * canvas.height;
+            
+            if (oldX >= 0 && oldX < canvas.width && oldY >= 0 && oldY < canvas.height) {
+                // Use old pixel if available
+                const oldIndex = (Math.floor(oldY) * canvas.width + Math.floor(oldX)) * 4;
+                const newIndex = (y * canvas.width + x) * 4;
+                data[newIndex] = oldData[oldIndex];
+                data[newIndex + 1] = oldData[oldIndex + 1];
+                data[newIndex + 2] = oldData[oldIndex + 2];
+                data[newIndex + 3] = 255;
+            } else {
+                // Calculate new pixel
+                const iterations = calculateIterations(cReal, cImag, maxIterations);
+                setPixelColor(x, y, iterations, data);
+            }
+        }
+        
+        if (y % 10 === 0) {
+            ctx.putImageData(imageData, 0, 0);
+        }
+        y++;
+        requestAnimationFrame(processRow);
+    }
+    
+    isDrawing = true;
+    processRow();
 }
 
 function isInMainCardioidOrBulb(x, y) {
