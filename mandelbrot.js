@@ -26,7 +26,6 @@ function resizeCanvas() {
         maxY = centerY + mathHeight / 2;
         
         drawMandelbrot(true);
-        setTimeout(() => drawMandelbrot(false), 50);
     }, 100);
 }
 
@@ -38,8 +37,6 @@ function handleZoom(e, zoomIn) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Save current image for interpolation
-    const oldImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const zoomFactor = zoomIn ? 0.5 : 2;
     
     // Calculate new boundaries
@@ -49,92 +46,40 @@ function handleZoom(e, zoomIn) {
     const newWidth = (maxX - minX) * zoomFactor;
     const newHeight = (maxY - minY) * zoomFactor;
     
-    // Store old boundaries for interpolation
-    const oldMinX = minX, oldMaxX = maxX;
-    const oldMinY = minY, oldMaxY = maxY;
-    
     minX = clickX - newWidth / 2;
     maxX = clickX + newWidth / 2;
     minY = clickY - newHeight / 2;
     maxY = clickY + newHeight / 2;
     
-    // Immediate scaled render
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    // Draw scaled version of old image
-    tempCtx.putImageData(oldImageData, 0, 0);
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Calculate scaling transform
-    const scaleX = canvas.width / (x - (zoomIn ? canvas.width/4 : -canvas.width));
-    const scaleY = canvas.height / (y - (zoomIn ? canvas.height/4 : -canvas.height));
-    
-    ctx.translate(x, y);
-    ctx.scale(zoomIn ? 2 : 0.5, zoomIn ? 2 : 0.5);
-    ctx.translate(-x, -y);
-    ctx.drawImage(tempCanvas, 0, 0);
-    ctx.restore();
-    
-    // Progressive refinement
-    requestAnimationFrame(() => {
-        drawMandelbrot(true); // Quick preview
-        requestAnimationFrame(() => {
-            drawMandelbrotProgressive(oldMinX, oldMaxX, oldMinY, oldMaxY, oldImageData);
-        });
-    });
+    // First do a quick render
+    drawMandelbrot(true);
+    // Then do a full quality render
+    requestAnimationFrame(() => drawMandelbrot(false));
 }
 
 function drawMandelbrot(isPreview = false) {
     isDrawing = true;
     const blockSize = isPreview ? 4 : 1;
-    const imageData = ctx.createImageData(canvas.width, canvas.height);
-    const data = imageData.data;
     const maxIterations = isPreview ? 100 : 1000;
     
-    // Scale factors to maintain consistent view regardless of window size
-    const scale = canvas.width / BASE_SIZE;
-    const widthRatio = (maxX - minX) / canvas.width * scale;
-    const heightRatio = (maxY - minY) / canvas.height * scale;
-
-    // Process the image in blocks
-    for (let blockX = 0; blockX < canvas.width; blockX += blockSize) {
-        for (let blockY = 0; blockY < canvas.height; blockY += blockSize) {
-            const cReal = minX + blockX * widthRatio;
-            const cImag = minY + blockY * heightRatio;
+    const imageData = ctx.createImageData(canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Pre-calculate width and height ratios
+    const widthRatio = (maxX - minX) / canvas.width;
+    const heightRatio = (maxY - minY) / canvas.height;
+    
+    for (let x = 0; x < canvas.width; x += blockSize) {
+        for (let y = 0; y < canvas.height; y += blockSize) {
+            const cReal = minX + x * widthRatio;
+            const cImag = minY + y * heightRatio;
             
-            // Calculate corner values for edge detection
             const iterations = calculateIterations(cReal, cImag, maxIterations);
             
-            // If preview mode or we're processing a single pixel, just set it
-            if (blockSize === 1 || isPreview) {
-                setPixelColor(blockX, blockY, iterations, data);
-                continue;
-            }
-            
-            // Check corners of the block for variation
-            const topRight = calculateIterations(cReal + blockSize * widthRatio, cImag, maxIterations);
-            const bottomLeft = calculateIterations(cReal, cImag + blockSize * heightRatio, maxIterations);
-            const bottomRight = calculateIterations(cReal + blockSize * widthRatio, 
-                                                 cImag + blockSize * heightRatio, maxIterations);
-            
-            // If all corners are similar, fill the block with the same color
-            if (Math.max(Math.abs(iterations - topRight),
-                        Math.abs(iterations - bottomLeft),
-                        Math.abs(iterations - bottomRight)) < 5) {
-                fillBlock(blockX, blockY, blockSize, iterations, data);
-            } else {
-                // Otherwise, calculate each pixel in the block
-                for (let x = 0; x < blockSize; x++) {
-                    for (let y = 0; y < blockSize; y++) {
-                        const pReal = cReal + x * widthRatio;
-                        const pImag = cImag + y * heightRatio;
-                        const pixelIterations = calculateIterations(pReal, pImag, maxIterations);
-                        setPixelColor(blockX + x, blockY + y, pixelIterations, data);
-                    }
+            // Fill the block with the calculated color
+            for (let dx = 0; dx < blockSize && x + dx < canvas.width; dx++) {
+                for (let dy = 0; dx < blockSize && y + dy < canvas.height; dy++) {
+                    setPixelColor(x + dx, y + dy, iterations, data);
                 }
             }
         }
