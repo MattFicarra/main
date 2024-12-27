@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mandelbrot Set Viewer</title>
     <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
         canvas {
-            border: 1px solid black;
+            display: block;
         }
     </style>
 </head>
 <body>
-    <canvas id="mandelbrotCanvas" width="800" height="600"></canvas>
-    <br>
-    <button onclick="zoomIn()">Zoom In</button>
-    <button onclick="zoomOut()">Zoom Out</button>
-    <button onclick="resetView()">Reset View</button>
-
+    <canvas id="mandelbrotCanvas"></canvas>
     <script src="mandelbrot.js"></script>
 </body>
 </html>
