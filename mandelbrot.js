@@ -72,30 +72,18 @@ function drawMandelbrot(isPreview = false) {
     console.log('Canvas size:', canvas.width, 'x', canvas.height);
     console.log('Coordinate range:', minX, maxX, minY, maxY);
     
+    // Fixed the y < canvas.height condition (was using x)
     for (let x = 0; x < canvas.width; x += blockSize) {
-        for (let y = 0; x < canvas.height; y += blockSize) {
+        for (let y = 0; y < canvas.height; y += blockSize) {
             const cReal = minX + x * widthRatio;
             const cImag = minY + y * heightRatio;
             
             const iterations = calculateIterations(cReal, cImag, maxIterations);
             
-            // Fixed nested loop conditions and simplified block filling
+            // Fill the block
             for (let dx = 0; dx < blockSize && (x + dx) < canvas.width; dx++) {
                 for (let dy = 0; dy < blockSize && (y + dy) < canvas.height; dy++) {
-                    const pixelX = x + dx;
-                    const pixelY = y + dy;
-                    const index = (pixelY * canvas.width + pixelX) * 4;
-                    
-                    if (iterations === maxIterations) {
-                        data[index] = data[index + 1] = data[index + 2] = 0;
-                    } else {
-                        const hue = (iterations % 360) / 360;
-                        const [r, g, b] = hslToRgb(hue, 1, 0.5);
-                        data[index] = r;
-                        data[index + 1] = g;
-                        data[index + 2] = b;
-                    }
-                    data[index + 3] = 255;
+                    setPixelColor(x + dx, y + dy, iterations, data);
                 }
             }
         }
